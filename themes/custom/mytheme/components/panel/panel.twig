@@ -1,0 +1,25 @@
+<panel-wrapper {% if image %}data-image="true"{% endif %}>
+  {% if image %}
+  <div>
+    {{ image }}
+  </div>
+  {% endif %}
+  <section class="lock">
+    <panel-content>
+    {% if icon %}
+    <div>
+      {{ icon }}
+    </div>
+    {% endif %}
+    <h2 class="extra-large-san-serif">{{ title }}</h2>
+    {% if description %}
+      {{ description }}
+    {% endif %}
+    {{ panel_inner }}
+    {% if link %}
+      {{ link }}
+    {% endif %}
+    </panel-content>
+  </section>
+</panel-wrapper>
+

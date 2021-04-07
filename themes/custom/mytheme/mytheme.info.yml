@@ -1,0 +1,26 @@
+name: My Great Theme
+type: theme
+description: This is my first theme project
+package: Other
+core_version_requirement: ^8 || ^9
+libraries:
+  - mytheme/global-styling
+  - mytheme/global-scripts
+
+components:
+  namespaces:
+    mytheme:
+      - components
+
+base theme: classy
+regions:
+  branding: Branding
+  navigation: Main navigation
+  search: Search
+  featured: Featured
+  content: Content
+  right_sidebar: Right sidebar
+  footer_first: Footer First
+  footer_second: Footer Second
+  footer_third: Footer Third
+  footer_bottom: Footer Bottom
