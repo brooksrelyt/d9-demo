@@ -1,0 +1,9 @@
+{{ attach_library('mytheme/card') }}
+{%
+  include '@mytheme/card/card.twig' with {
+    image: content.field_card_photo,
+    name: content.field_card_name,
+    bio: content.field_card_biography,
+    socialLinks: social,
+  } only
+%}

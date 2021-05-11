@@ -1,0 +1,39 @@
+<general-page>
+  {% for item in node.field_project_content %}
+    <div class="lock">
+      <flex-columns data-columns="2">
+        <div>
+            <h1 class="max-large-san-serif">{{ node.label }}</h1>
+            <dl>
+              <dt>Project Type</dt>
+              {% for items in item.entity.field_project_type %}
+                <dd>{{ items.value }}</dd>
+              {% endfor %}
+              <dt>Year</dt>
+              <dd>{{ item.entity.field_project_year.value }}</dd>
+              <dt>Agency</dt>
+              <dd>{{ item.entity.field_project_agency.value }}</dd>
+              <dt>Skills</dt>
+              {% for items in item.entity.field_project_skills %}
+                <dd>{{ items.value }}</dd>
+              {% endfor %}
+              <dt>Link</dt>
+              <dd>{{ item.entity.field_project_link.value }}</dd>
+            </dl>
+        </div>
+        <div>
+          <p>{{ item.entity.field_project_description.value|raw }}
+        </div>
+      </flex-columns>
+    </div>
+    <section>
+      {% for media in item.entity.field_project_image %}
+        <img src="{{ file_url(media.entity.uri.value) }}" alt="{{ file_url(media.entity.value) }}">
+      {% endfor %}
+    </section>
+    {% endfor %}
+  </div>
+</general-page>
+ 
+
+

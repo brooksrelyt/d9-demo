@@ -8,6 +8,8 @@ use Drupal\Core\Extension\ExtensionList;
 use Drupal\Core\Extension\ModuleExtensionList;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Extension\ThemeExtensionList;
+use Drupal\Core\File\Exception\NotRegularDirectoryException;
+use Drupal\Core\File\FileSystemInterface;
 use Drupal\Core\Logger\LoggerChannelTrait;
 use Drupal\Core\Theme\ThemeManagerInterface;
 
@@ -19,11 +21,12 @@ class ComponentsRegistry {
   use LoggerChannelTrait;
 
   /**
-   * Cache of namespaces for each theme.
+   * The component registry for every theme.
    *
    * @var array
+   *   An array of component registries, keyed by the theme name.
    */
-  protected $namespaces = [];
+  protected $registry = [];
 
   /**
    * The module handler.
@@ -61,11 +64,11 @@ class ComponentsRegistry {
   protected $cache;
 
   /**
-   * Stores whether the registry was already initialized.
+   * The file system service.
    *
-   * @var bool
+   * @var \Drupal\Core\File\FileSystemInterface
    */
-  protected $initialized = FALSE;
+  protected $fileSystem;
 
   /**
    * Constructs a new ComponentsRegistry object.
@@ -80,81 +83,174 @@ class ComponentsRegistry {
    *   The theme manager service.
    * @param \Drupal\Core\Cache\CacheBackendInterface $cache
    *   Cache backend for storing the components registry info.
+   * @param \Drupal\Core\File\FileSystemInterface $fileSystem
+   *   The file system service.
    */
   public function __construct(
     ModuleExtensionList $moduleExtensionList,
     ThemeExtensionList $themeExtensionList,
     ModuleHandlerInterface $moduleHandler,
     ThemeManagerInterface $themeManager,
-    CacheBackendInterface $cache
+    CacheBackendInterface $cache,
+    FileSystemInterface $fileSystem
   ) {
     $this->moduleExtensionList = $moduleExtensionList;
     $this->themeExtensionList = $themeExtensionList;
     $this->moduleHandler = $moduleHandler;
     $this->themeManager = $themeManager;
     $this->cache = $cache;
+    $this->fileSystem = $fileSystem;
   }
 
   /**
-   * Initializes the registry and loads the theme namespaces.
+   * Gets the path to the given template.
+   *
+   * @param string $name
+   *   The name of the template.
+   *
+   * @return null|string
+   *   The path to the template, or NULL if not found.
    */
-  protected function init(): void {
-    $this->initialized = TRUE;
-
-    if ($cached = $this->cache->get('components:namespaces')) {
-      $this->namespaces = $cached->data;
-      return;
+  public function getTemplate(string $name): ?string {
+    $themeName = $this->themeManager->getActiveTheme()->getName();
+    if (!isset($this->registry[$themeName])) {
+      $this->load($themeName);
     }
 
-    $this->namespaces = $this->findNamespaces($this->moduleExtensionList, $this->themeExtensionList);
-    $this->cache->set(
-      'components:namespaces',
-      $this->namespaces,
-      Cache::PERMANENT,
-      ['theme_registry']
-    );
+    return $this->registry[$themeName][$name] ?? NULL;
   }
 
   /**
-   * Gets the name of the active theme.
+   * Ensures the component registry is available for the given active theme.
    *
-   * @return string
-   *   The machine name of the active theme.
+   * @param string $themeName
+   *   The name of the active theme.
    */
-  public function getActiveThemeName(): string {
-    return $this->themeManager->getActiveTheme()->getName();
+  protected function load(string $themeName): void {
+    // Load from cache.
+    if ($cache = $this->cache->get('components:registry:' . $themeName)) {
+      $this->registry[$themeName] = $cache->data;
+    }
+    else {
+      // Build the registry.
+      $this->registry[$themeName] = [];
+
+      // Get the full list of namespaces and their paths.
+      $nameSpaces = $this->getNamespaces($themeName);
+
+      $regex = '/\.(twig|html|svg)$/';
+
+      foreach ($nameSpaces as $nameSpace => $nameSpacePaths) {
+        foreach ($nameSpacePaths as $nameSpacePath) {
+          $possible_duplicates = [];
+          try {
+            // Get a listing of all Twig files in the namespace path.
+            $files = $this->fileSystem->scanDirectory($nameSpacePath, $regex);
+          }
+          catch (NotRegularDirectoryException $exception) {
+            $this->logWarning(sprintf('The "@%s" namespace contains a path, "%s", that is not a directory.',
+              $nameSpace,
+              $nameSpacePath,
+            ));
+            $files = [];
+          }
+          ksort($files);
+          foreach ($files as $filePath => $file) {
+            // Register the full path and short path to the template.
+            $templates = [
+              '@' . $nameSpace . '/' . str_replace($nameSpacePath . '/', '', $filePath),
+              '@' . $nameSpace . '/' . $file->filename,
+            ];
+            foreach ($templates as $template) {
+              if (!isset($this->registry[$themeName][$template])) {
+                $this->registry[$themeName][$template] = $filePath;
+              }
+            }
+
+            // Keep track of duplicates filenames inside this $nameSpacePath.
+            $possible_duplicates[$file->filename][] = $filePath;
+          }
+
+          // Duplicate template names are expected across separate configured
+          // directories in a namespace (e.g. a theme directory vs base theme
+          // directory), but duplicates within one configured directory should
+          // be warned against.
+          foreach ($possible_duplicates as $filename => $paths) {
+            if (count($paths) > 1) {
+              $extension = substr($filename, strrpos($filename, '.', -1));
+              if ($extension !== '.svg') {
+                $this->logWarning(sprintf('Found multiple files for the "%s" template; it is recommended to only have one "%s" file in the "%s" namespace’s "%s" directory. Found: %s',
+                  '@' . $nameSpace . '/' . $filename,
+                  $filename,
+                  $nameSpace,
+                  $nameSpacePath,
+                  implode(', ', $paths)
+                ));
+              }
+            }
+          }
+        }
+      }
+
+      // Only persist if all modules are loaded to ensure the cache is complete.
+      if ($this->moduleHandler->isLoaded()) {
+        $this->cache->set(
+          'components:registry:' . $themeName,
+          $this->registry[$themeName],
+          Cache::PERMANENT,
+          ['theme_registry']
+        );
+      }
+    }
   }
 
   /**
-   * Get namespaces for the active theme.
+   * Get namespaces for the given theme.
+   *
+   * @param string $themeName
+   *   The machine name of the theme.
    *
    * @return array
    *   The array of namespaces.
    */
-  public function getNamespaces(): array {
-    if (!$this->initialized) {
-      $this->init();
+  public function getNamespaces(string $themeName): array {
+    if ($cached = $this->cache->get('components:namespaces:' . $themeName)) {
+      return $cached->data;
     }
 
-    $activeTheme = $this->getActiveThemeName();
-    if ($cached = $this->cache->get('components:namespaces:' . $activeTheme)) {
-      $this->namespaces[$activeTheme] = $cached->data;
-      return $this->namespaces[$activeTheme];
+    // Load and cache un-altered Twig namespaces for all themes.
+    if ($cached = $this->cache->get('components:namespaces')) {
+      $allNamespaces = $cached->data;
+    }
+    else {
+      $allNamespaces = $this->findNamespaces($this->moduleExtensionList, $this->themeExtensionList);
+      // Only persist if all modules are loaded to ensure the cache is complete.
+      if ($this->moduleHandler->isLoaded()) {
+        $this->cache->set(
+          'components:namespaces',
+          $allNamespaces,
+          Cache::PERMANENT,
+          ['theme_registry']
+        );
+      }
     }
 
-    $namespaces = isset($this->namespaces[$activeTheme]) ? $this->namespaces[$activeTheme] : [];
+    // Get the un-altered namespaces for the theme.
+    $namespaces = $allNamespaces[$themeName] ?? [];
 
     // Run hook_components_namespaces_alter().
-    $this->moduleHandler->alter('components_namespaces', $namespaces, $activeTheme);
-    $this->themeManager->alter('components_namespaces', $namespaces, $activeTheme);
+    $this->moduleHandler->alter('components_namespaces', $namespaces, $themeName);
+    $this->themeManager->alter('components_namespaces', $namespaces, $themeName);
 
-    $this->namespaces[$activeTheme] = $namespaces;
-    $this->cache->set(
-      'components:namespaces:' . $activeTheme,
-      $this->namespaces[$activeTheme],
-      Cache::PERMANENT,
-      ['theme_registry']
-    );
+    // Only persist if all modules are loaded to ensure the cache is complete.
+    if ($this->moduleHandler->isLoaded()) {
+      $this->cache->set(
+        'components:namespaces:' . $themeName,
+        $namespaces,
+        Cache::PERMANENT,
+        ['theme_registry']
+      );
+    }
 
     return $namespaces;
   }
@@ -195,7 +291,7 @@ class ComponentsRegistry {
     }
 
     // Find other namespaces defined by modules.
-    foreach ($moduleInfo as $moduleName => &$info) {
+    foreach ($moduleInfo as &$info) {
       foreach ($info['namespaces'] as $namespace => $paths) {
         // Skip protected namespaces and log a warning.
         if (isset($protectedNamespaces[$namespace])) {
@@ -212,7 +308,7 @@ class ComponentsRegistry {
 
     // Remove protected namespaces from each theme's namespaces and log a
     // warning.
-    foreach ($themeInfo as $themeName => &$info) {
+    foreach ($themeInfo as &$info) {
       foreach (array_keys($info['namespaces']) as $namespace) {
         if (isset($protectedNamespaces[$namespace])) {
           unset($info['namespaces'][$namespace]);
@@ -241,6 +337,10 @@ class ComponentsRegistry {
   /**
    * Gets info from the given extension list and normalizes components data.
    *
+   * If a namespace's path starts with a "/", the path is relative to the root
+   * Drupal installation path (i.e. the directory that contains Drupal's "core"
+   * directory.) Otherwise, the path is relative to the extension's path.
+   *
    * @param \Drupal\Core\Extension\ExtensionList $extensionList
    *   The extension list to search.
    *
@@ -257,7 +357,7 @@ class ComponentsRegistry {
         'extensionInfo' => [
           'name' => $extensionInfo['name'],
           'type' => $extensionInfo['type'],
-          'package' => isset($extensionInfo['package']) ? $extensionInfo['package'] : '',
+          'package' => $extensionInfo['package'] ?? '',
         ],
       ];
       if (method_exists($extensionList, 'getBaseThemes')) {
@@ -284,10 +384,27 @@ class ComponentsRegistry {
       if (isset($info['namespaces'])) {
         $extensionPath = $extensionList->getPath($name);
         foreach ($info['namespaces'] as $namespace => $paths) {
-          $data[$name]['namespaces'][$namespace] = self::normalizeNamespacePaths(
-            $paths,
-            $extensionPath
-          );
+          // Allow paths to be an array or a string.
+          if (!is_array($paths)) {
+            $paths = [$paths];
+          }
+
+          // Add the full path to the namespace paths.
+          foreach ($paths as $key => $path) {
+            // Determine if the given path is relative to the Drupal root or to
+            // the extension.
+            if ($path[0] === '/') {
+              // Just remove the starting "/" to make it relative to the Drupal
+              // root.
+              $paths[$key] = ltrim($path, '/');
+            }
+            else {
+              // $extensionPath is relative to the Drupal root.
+              $paths[$key] = $extensionPath . '/' . $path;
+            }
+          }
+
+          $data[$name]['namespaces'][$namespace] = $paths;
         }
       }
 
@@ -296,43 +413,6 @@ class ComponentsRegistry {
     }
 
     return $data;
-  }
-
-  /**
-   * Normalizes namespaces using the given path to the extension.
-   *
-   * If a namespace's path starts with a "/", the path is relative to the root
-   * Drupal installation path (i.e. the directory that contains Drupal's "core"
-   * directory.) Otherwise, the path is relative to the $extensionPath.
-   *
-   * @param string|string[] $paths
-   *   The list of namespaces as a single string containing the path or a
-   *   numerically-indexed array of paths.
-   * @param string $extensionPath
-   *   The path to the extension defining the namespace.
-   *
-   * @return array
-   *   The normalized list of namespace paths, an array of absolute paths on the
-   *   web server's file system.
-   */
-  public static function normalizeNamespacePaths($paths, string $extensionPath = ''): array {
-    // Allow paths to be an array or a string.
-    if (!is_array($paths)) {
-      $paths = [$paths];
-    }
-
-    // Add the full path to the namespace paths.
-    foreach ($paths as $key => $path) {
-      // Determine if the given path is relative to the Drupal root or to
-      // the extension.
-      $parentPath = ($path[0] === '/')
-        ? \Drupal::root()
-        // Append "/" since $path does not start with "/".
-        : $extensionPath . '/';
-      $paths[$key] = $parentPath . $path;
-    }
-
-    return $paths;
   }
 
   /**
@@ -364,7 +444,7 @@ class ComponentsRegistry {
       $protectedNamespaces[$defaultName] = [
         'name' => $info['extensionInfo']['name'],
         'type' => $info['extensionInfo']['type'],
-        'package' => isset($info['extensionInfo']['package']) ? $info['extensionInfo']['package'] : '',
+        'package' => $info['extensionInfo']['package'] ?? '',
       ];
     }
 
@@ -383,7 +463,7 @@ class ComponentsRegistry {
    *
    * @param string $message
    *   The warning to log.
-   * @param mixed[] $context
+   * @param array $context
    *   Any additional context to pass to the logger.
    *
    * @internal

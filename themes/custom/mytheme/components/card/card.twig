@@ -1,0 +1,18 @@
+<div class="card">
+  <div class="card__image">{{ image }}</div>
+  <h2 class="card__name">{{ name }}</h2>
+  <div class="card__social-media">
+    <div class="card__social-media--label">Follow on:</div>
+    <ul class="menu card__menu--social">
+      {% for item in socialLinks %}
+        <li class="card__menu--social--item">
+          <a href="{{ item.url }}" class="icon-{{ item.icon|lower|clean_class }}">
+            {{ icons.get(item.icon) }}<span>{{ item.icon }}</span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+  <button class="card__view-bio">{{ showBio }}</button>
+    <div class="card__bio">{{ bio }}</div>
+</div>

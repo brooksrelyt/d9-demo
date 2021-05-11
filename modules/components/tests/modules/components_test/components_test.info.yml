@@ -1,0 +1,14 @@
+name: 'Components test'
+type: module
+description: 'Support module for Components testing.'
+package: Testing
+components:
+  namespaces:
+    components_test: 'default-namespace'
+    components: 'components'
+    system: 'system'
+
+# Information added by Drupal.org packaging script on 2021-05-11
+version: '3.0.0-beta2'
+project: 'components'
+datestamp: 1620763348

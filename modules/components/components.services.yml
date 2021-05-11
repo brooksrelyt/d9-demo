@@ -1,7 +1,7 @@
 services:
   components.registry:
     class: Drupal\components\Template\ComponentsRegistry
-    arguments: ['@extension.list.module', '@extension.list.theme', '@module_handler', '@theme.manager', '@cache.default']
+    arguments: ['@extension.list.module', '@extension.list.theme', '@module_handler', '@theme.manager', '@cache.default', '@file_system']
 
   components.twig.loader:
     class: Drupal\components\Template\Loader\ComponentsLoader

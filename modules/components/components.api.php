@@ -15,7 +15,8 @@
  *
  * @param array $namespaces
  *   The array of Twig namespaces where the key is the machine name of the
- *   namespace and the value is an array of absolute directory paths.
+ *   namespace and the value is an array of directory paths that are relative to
+ *   the Drupal root.
  * @param string $theme
  *   The name of the theme that the namespaces are defined for.
  *
@@ -24,18 +25,19 @@
 function hook_components_namespaces_alter(array &$namespaces, string $theme) {
   // Add a new namespace.
   $namespaces['new_namespace'] = [
-    // Paths must be absolute directory paths.
-    '/usr/local/var/web/new-components',
+    // Paths must be relative to the Drupal root.
+    'libraries/new-components',
+    'themes/contrib/zen/new-components',
+    // Even paths adjacent to the Drupal root will work.
+    '../vendor/newFangled/new-components',
   ];
 
-  // Optionally, you can use a helper function to specify paths relative to the
-  // Drupal root. Paths must start with a "/" or the Drupal root path will not
-  // be prepended.
-  $namespaces['vendor_namespace'] = \Drupal\components\Template\ComponentsRegistry::normalizeNamespacePaths(
-    [
-      '/vender/universe/fermions',
-    ]
-  );
+  // If you only want to change namespaces for a specific theme the $theme
+  // parameter has the name of the currently active theme.
+  if ($theme === 'zen') {
+    // Append a path to an existing namespace.
+    $namespaces['components'][] = drupal_get_path('theme', 'zen') . '/components';
+  }
 }
 
 /**

@@ -4,23 +4,13 @@ description: This is my first theme project
 package: Other
 core_version_requirement: ^8 || ^9
 libraries:
-  - mytheme/global-styling
-  - mytheme/global-scripts
-
+  - mytheme/global
 components:
   namespaces:
     mytheme:
       - components
-
 base theme: classy
 regions:
-  branding: Branding
-  navigation: Main navigation
-  search: Search
-  featured: Featured
+  main_menu: Main Menu
   content: Content
-  right_sidebar: Right sidebar
-  footer_first: Footer First
-  footer_second: Footer Second
-  footer_third: Footer Third
-  footer_bottom: Footer Bottom
+  footer_menu: Footer Menu

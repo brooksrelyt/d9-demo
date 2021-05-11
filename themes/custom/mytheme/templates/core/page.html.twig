@@ -1,0 +1,15 @@
+
+{% include directory ~ '/templates/_includes/global/header.html.twig' %}
+
+<section class="main" id="main">
+  <main aria-label="Site main content" class="content" id="content" role="main">
+    {{ page.content }}
+  </main>
+</section>
+<footer aria-label="Site footer" class="footer" id="footer" role="contentinfo">
+  <footer-inner>
+    &copy; 2013 - {{ 'now'|date('Y') }}. All Rights Reserved. <a href="/">YourCompanyName.com</a> 
+  </footer-inner>
+</footer>
+
+<script src="/core/misc/drupal.js"></script>

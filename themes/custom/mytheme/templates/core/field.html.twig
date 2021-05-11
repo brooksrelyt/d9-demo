@@ -1,0 +1,14 @@
+{#
+/**
+ * @file
+ * Theme override for field.
+ *
+ * Removes excess markup.
+ */
+#}
+
+{% spaceless %}
+{% for item in items %}
+  {{ item.content }}
+{% endfor %}
+{% endspaceless %}

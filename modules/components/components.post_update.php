@@ -31,3 +31,9 @@ function components_post_update_components_registry_service() {
  */
 function components_post_update_components_twig_loader_service() {
 }
+
+/**
+ * Clear caches to allow components.registry service to cache template paths.
+ */
+function components_post_update_components_registry_cache_paths() {
+}

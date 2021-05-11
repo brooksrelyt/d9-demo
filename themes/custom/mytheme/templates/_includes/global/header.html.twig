@@ -1,0 +1,28 @@
+{#
+/**
+ * @file
+ * Displays the global header.
+ * Uses Twig Tweak
+ */
+#}
+
+<header aria-label="Site header" class="header" id="header" role="banner">
+  <a href="#main">Skip to main content</a>
+  <div class="lock">
+    <nav-navbar>
+      <a href="/" class="logo">
+        <img src={{ logopath }} alt="logo" />
+        <div class="site-name">
+          <span>{{ site_name }}</span>
+        </div>
+      </a>
+
+      <button id="js-navbar-toggle" aria-controls="js-menu">
+        <span><span class="sr-only">Toggle Navigation Bar</span></span>
+      </button>
+    </nav-navbar>
+
+    {{ drupal_menu('main') }}
+
+  </div>
+</header>

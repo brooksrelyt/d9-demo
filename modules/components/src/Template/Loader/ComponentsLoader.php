@@ -3,13 +3,14 @@
 namespace Drupal\components\Template\Loader;
 
 use Drupal\components\Template\ComponentsRegistry;
+use Twig\Error\LoaderError;
 use Twig\Loader\FilesystemLoader;
 
 /**
- * Loads templates from the filesystem.
+ * Loads namespaced templates from the filesystem.
  *
- * This loader adds module and theme components paths as namespaces to the Twig
- * filesystem loader so that templates can be referenced by namespace, like
+ * This loader adds module and theme defined namespaces to the Twig filesystem
+ * loader so that templates can be referenced by namespace, like
  * \@mycomponents/box.html.twig or \@mythemeComponents/page.html.twig.
  */
 class ComponentsLoader extends FilesystemLoader {
@@ -20,13 +21,6 @@ class ComponentsLoader extends FilesystemLoader {
    * @var \Drupal\components\Template\ComponentsRegistry
    */
   protected $componentsRegistry;
-
-  /**
-   * The active theme that the current namespaces are valid for.
-   *
-   * @var string
-   */
-  protected $activeTheme;
 
   /**
    * Constructs a new ComponentsLoader object.
@@ -41,35 +35,39 @@ class ComponentsLoader extends FilesystemLoader {
   }
 
   /**
-   * Activates the proper namespaces if the active theme has changed.
+   * {@inheritdoc}
+   *
+   * @throws \Twig\Error\LoaderError
+   *   Thrown if a template matching $name cannot be found.
    */
-  public function init() {
-    $activeTheme = $this->componentsRegistry->getActiveThemeName();
+  protected function findTemplate($name, $throw = TRUE) {
+    // Validate the given template.
+    $extension = substr($name, strrpos($name, '.', -1));
+    if ($name[0] !== '@' || !str_contains(substr($name, 2), '/') || $extension !== '.twig' && $extension !== '.html' && $extension !== '.svg') {
+      if (!$throw) {
+        return NULL;
+      }
 
-    // Update our namespaces if the active theme has changed.
-    if ($this->activeTheme !== $activeTheme) {
-      // Invalidate the cache.
-      $this->cache = $this->errorCache = [];
+      throw new LoaderError(sprintf('Malformed namespaced template name "%s" (expecting "@namespace/template_name.twig").', $name));
+    }
+    else {
+      // componentsRegistry::getTemplate() returns a string or NULL, exactly
+      // what componentsLoader::findTemplate() should return.
+      $path = $this->componentsRegistry->getTemplate($name);
 
-      // Set the new paths.
-      $this->paths = $this->componentsRegistry->getNamespaces();
+      if ($path || !$throw) {
+        return $path;
+      }
 
-      // Save the active theme for later use.
-      $this->activeTheme = $activeTheme;
+      throw new LoaderError(sprintf('Unable to find template "%s" in the components registry.', $name));
     }
   }
 
   /**
    * {@inheritdoc}
-   *
-   * @throws \Twig\Error\LoaderError
    */
-  protected function findTemplate($name, $throw = TRUE) {
-    // The active theme might change during the request, so we wait until the
-    // last possible moment to initialize before delivering a template.
-    $this->init();
-
-    return parent::findTemplate($name, $throw);
+  public function exists($name): bool {
+    return (bool) $this->componentsRegistry->getTemplate($name);
   }
 
 }
